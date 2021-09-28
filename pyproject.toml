@@ -3,7 +3,7 @@ name = "wmgr"
 version = "0.1.0"
 description = "Yet another tool for tiling, resizing, and managing windows"
 authors = [
-    {name = "'Gilad Barnea'", email = "giladbrn@gmail.com"},
+    {name = "Gilad Barnea", email = "giladbrn@gmail.com"},
 ]
 dependencies = []
 requires-python = ">=3.9"
@@ -15,7 +15,11 @@ homepage = "https://github.com/giladbarnea/wmgr"
 
 
 [project.optional-dependencies]
-optional = [ "rich~=10.11", ]
+optional = [
+    "rich~=10.11",
+    "twine~=3.4",
+    "semver~=2.13",
+]
 
 [build-system]
 requires = ["pdm-pep517"]
