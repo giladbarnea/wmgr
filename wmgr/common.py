@@ -1,11 +1,11 @@
 # * This file shouldn't import anything at root level!
 """
---no-notif                  default True
---no-print                  default True
+--no-notif                  default False (default is to notify)
+--no-log                    default False (default is to log)
 --ignore-scripts[=false]    default True
---stdout-result             default False
+--output-result             default False
 
-No-op if --no-print:
+No-op if --no-log:
     info  = console_info
     warn  = console_warn
     error = console_error
@@ -14,19 +14,19 @@ No-op if --no-print:
     good  = console_good
 
 if --no-notif:
-    notif_{info,warn,error,fatal,good} refer to console_* (no-op if --no-print)
-otherwise notif_* source zenity.sh and call z.{level} with --bg
+    notif_{info,warn,error,fatal,good} refer to console_* (which are no-op if --no-log)
+otherwise notif_* source zenity.sh with --no-log and call z.{level} with --bg
 """
 import sys
 
 # global should_notify
 # global ignore_scripts
-# global should_print
+# global should_log
 
 should_notify = True
 ignore_scripts = True
-should_print = True
-should_stdout_result = False
+should_log = True
+should_output_result = False
 
 for arg in sys.argv:
     if arg == '--no-notif':
@@ -34,19 +34,18 @@ for arg in sys.argv:
         continue
     
     if arg.startswith('--ignore-scripts'):
-        _, _, argval = arg.partition('=')
-        ignore_scripts = False if argval.lower() == 'false' else True
+        ignore_scripts = False if arg.partition('=')[2] == 'false' else True
         continue
     
-    if arg == '--no-print':
-        should_print = False
+    if arg == '--no-log':
+        should_log = False
         continue
     
-    if arg == '--stdout-result':
-        should_stdout_result = True
+    if arg == '--output-result':
+        should_output_result = True
         continue
 
-if should_print:
+if should_log:
     from rich.console import Console
     from rich.theme import Theme
     import os
@@ -55,7 +54,7 @@ if should_print:
                       color_system="truecolor",
                       tab_size=4,
                       stderr=True,
-                      width=int(int(os.environ.get('COLUMNS', 240)) * 2 / 3),
+                      # width=int(int(os.environ.get('COLUMNS', 240)) * 2 / 3),
                       theme=Theme({
                           '#':      'dim',
                           'debug':  'dim',
@@ -67,16 +66,16 @@ if should_print:
                           }))
     
     
-    def console_log(message):
-        console.log(message, _stack_offset=2)
+    def console_log(*args):
+        console.log(*args, _stack_offset=2)
     
     
-    console_error = lambda message: console.log(f'[error]{message}[/]', _stack_offset=2)
-    console_warn = lambda message: console.log(f'[warn]{message}[/]', _stack_offset=2)
-    console_debug = lambda message: console.log(f'[debug]{message}[/]', _stack_offset=2)
-    console_fatal = lambda message: console.log(f'[fatal]{message}[/]', _stack_offset=2)
-    console_good = lambda message: console.log(f'[good]{message}[/]', _stack_offset=2)
-else:
+    console_error = lambda *args: console.log('\n· '.join(f'[error]{_arg}' for _arg in args), _stack_offset=2)
+    console_warn = lambda *args:  console.log('\n· '.join(f'[warn]{_arg}' for _arg in args), _stack_offset=2)
+    console_debug = lambda *args: console.log('\n· '.join(f'[debug]{_arg}' for _arg in args), _stack_offset=2)
+    console_fatal = lambda *args: console.log('\n· '.join(f'[fatal]{_arg}' for _arg in args), _stack_offset=2)
+    console_good = lambda *args:  console.log('\n· '.join(f'[good]{_arg}' for _arg in args), _stack_offset=2)
+else: # should_log is False
     console_log = lambda *args, **kwargs: True
     console_error = lambda *args, **kwargs: True
     console_warn = lambda *args, **kwargs: True
@@ -91,47 +90,45 @@ debug = console_debug
 fatal = console_fatal
 good = console_good
 
-if not should_notify:
+if should_notify:
+    def _notif(text, level: "good, info, warn, error, fatal") -> bool:
+        """
+        Makes a bash command to source ~/dev/bashscripts/zenity.sh and calls one of the z.{level} functions.
+        `notify_if_stderr` must be False to prevent recursion in case the actual source of zenity.sh fails.
+        Sourcing zenity.sh must be done with --no-log regardless of `should_log`, because in any case, logging
+        is this module's responsibility.
+        """
+        import os
+        zenity = os.path.expanduser("~/dev/bashscripts/zenity.sh")
+        return bash([f'source {zenity} --no-log; z.{level} "{text}" --bg'],
+                    notify_if_stderr=False)
+
+
+    def notif_fatal(text):
+        return _notif(text, "fatal")
+
+
+    def notif_error(text):
+        return _notif(text, "error")
+
+
+    def notif_warn(text):
+        return _notif(text, "warn")
+
+
+    def notif_info(text):
+        return _notif(text, "info")
+
+
+    def notif_good(text):
+        return _notif(text, "good")
+
+else: # should_notify is False
     notif_info = info
     notif_warn = warn
     notif_error = error
     notif_fatal = fatal
     notif_good = good
-
-else:
-    
-    def _notif(text, level: "good, info, warn, error, fatal") -> bool:
-        """
-        Makes a bash command to source ~/dev/bashscripts/zenity.sh and calls one of the z.{level} functions.
-        Not affected by `--no-print`, unless the actual sourcing and calling of zenity.sh fails.
-        `notify_if_stderr` must be False to prevent recursion in case the actual source of zenity.sh fails.
-        Note: zenity.sh functions also log to stderr.
-        """
-        import os
-        zenity = os.path.expanduser("~/dev/bashscripts/zenity.sh")
-        # return bash(f'source "{zenity}"; z.{level} "{text}" --bg', notify_if_stderr=False)
-        return bash([f'source {zenity}; z.{level} "{text}" --bg'],
-                    notify_if_stderr=False)
-    
-    
-    def notif_fatal(text):
-        return _notif(text, "fatal")
-    
-    
-    def notif_error(text):
-        return _notif(text, "error")
-    
-    
-    def notif_warn(text):
-        return _notif(text, "warn")
-    
-    
-    def notif_info(text):
-        return _notif(text, "info")
-    
-    
-    def notif_good(text):
-        return _notif(text, "good")
 
 
 def bash(cmd, *, timeout=2, quiet=False, notify_if_stderr=should_notify, background=False) -> bool:
@@ -139,19 +136,20 @@ def bash(cmd, *, timeout=2, quiet=False, notify_if_stderr=should_notify, backgro
     Runs `cmd` with bash. Returns whether the process returned OK or not.
 
     If the process was not OK:
-     - prints cmd and return code via `console_fatal` (which might be a noop if `--no-print` was passed somewhere)
+     - prints cmd and return code via `console_fatal` (which might be a noop if `--no-log` was passed somewhere)
      - notifies err message with zenity (recursively), unless `notify_if_stderr=False`.
 
 
     `quiet=True` means no console_log, no notif_fatal.
     """
     # TODO: bash(cmd, *args, timeout=2, ...)
-    if should_print and not quiet: debug(f"common.bash({repr(cmd)}, {timeout = }, {quiet = }, {notify_if_stderr = }, {background = })")
+    if should_log and not quiet: debug(f"common.bash({cmd!r}, {timeout = }, {quiet = }, {notify_if_stderr = }, {background = })")
     import subprocess
+    import shlex
     try:
         try:
             # marginally faster than isinstance
-            cmdarr = cmd.split()
+            cmdarr = shlex.split(cmd)
         except AttributeError:
             cmdarr = cmd
         
@@ -182,11 +180,11 @@ def bash(cmd, *, timeout=2, quiet=False, notify_if_stderr=should_notify, backgro
         # quiet is False, so if something went wrong, notify and print that
         if not returned_ok:
             err = ''
-            if should_print:
-                err = f'common.bash({repr(cmd)})\n\treturncode: {returncode}'
+            if should_log:
+                err = f'common.bash({cmd!r})\n\treturncode: {returncode}'
                 fatal(err)
             if notify_if_stderr:
-                if not err: err = f'common.bash({repr(cmd)})\n\treturncode: {returncode}'
+                if not err: err = f'common.bash({cmd!r})\n\treturncode: {returncode}'
                 notif_fatal(err)
             return False
         return True
@@ -194,11 +192,11 @@ def bash(cmd, *, timeout=2, quiet=False, notify_if_stderr=should_notify, backgro
         if quiet:
             return False
         err = ''
-        if should_print:
-            err = f'common.bash({repr(cmd)}) timed out'
+        if should_log:
+            err = f'common.bash({cmd!r}) timed out'
             fatal(err)
         if notify_if_stderr:
-            if not err: err = f'common.bash({repr(cmd)}) timed out'
+            if not err: err = f'common.bash({cmd!r}) timed out'
             notif_fatal(err)
         return False
 
@@ -247,7 +245,8 @@ def bash(cmd, *, timeout=2, quiet=False, notify_if_stderr=should_notify, backgro
 
 def proc_output(cmd) -> str:
     import subprocess
-    return subprocess.Popen(cmd.split(), stdout=subprocess.PIPE).stdout.read().decode()
+    import shlex
+    return subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE).stdout.read().decode()
 
 
 def launch(executable, *args) -> bool:
@@ -257,11 +256,13 @@ def launch(executable, *args) -> bool:
     for d in os.environ['PATH'].split(':'):
         if os.path.isfile(joined := os.path.join(d, executable)):
             if args:
-                return bash([joined, *args], background=True)
+                return bash([joined, *args], background=not should_log)
             else:
-                return bash(joined, background=True)
-    return False
-    
+                return bash(joined, background=not should_log)
+    # from threading import Thread
+    # thread = Thread(target=bash, args=(executable, *args), kwargs={'quiet': not should_log})
+    # return thread.start()
+    return bash([executable, *args], background=not should_log)
     launchsh = os.path.expanduser("~/dev/bashscripts/launch.sh")
     logsh = os.path.expanduser("~/dev/bashscripts/log.sh")
     return bash([f'source {logsh}; source "{launchsh}"; launch {cmd}'], notify_if_stderr=False)
@@ -283,7 +284,7 @@ def quote_if_space(s):
 
 def prettydoc(fn) -> str:
     import inspect
-    return f"{fn.__qualname__}{inspect.signature(fn)}\n{fn.__doc__}"
+    return f"\x1b[97;1m{fn.__qualname__}{inspect.signature(fn)}\x1b[0m\n{fn.__doc__}"
 
 
 def prettyerr(e: Exception) -> str:
@@ -362,7 +363,7 @@ def compile_wmc_pattern():
             r'(?P<pid>\d{4,6})\s+'
             r'(?P<classname>[\w\d_\-. ]+)\s+'
             r')'
-            rf'(?P<user>{user})\s+'
+            rf'(?P<user>({user}|N/A))\s+'
             r'(?P<name>.+)'
             )
 

@@ -13,9 +13,9 @@ def main(app: str, *args):
     if 'help' in app or app == '-h' or any('help' in arg or arg == '-h' for arg in args):
         print(common.prettydoc(main))
         return False
-    if common.should_print: common.debug(f'gethexid.main({app = }, {args = })')
+    if common.should_log: common.debug(f'gethexid.main({app = }, {args = })')
     if common.is_hexid(app):
-        if common.should_stdout_result: print(app, end='')
+        if common.should_output_result: print(app, end='')
         return app
     import subprocess as sp
     wmc_pattern = None
@@ -26,25 +26,26 @@ def main(app: str, *args):
         line = sp.Popen(f'wmctrl -lpx | grep "{name}"'.split(), stdout=sp.PIPE).stdout.read().decode()  # only one wid or hexid
         linedict = common.split_wmc_line(line, wmc_pattern)
         hexid = linedict['hexid']
-        if common.should_stdout_result: print(hexid, end='')
+        if common.should_output_result: print(hexid, end='')
         return hexid
 
     # app is pid or name
     lines = sp.Popen(f'wmctrl -lpx | grep "{app}"'.split(), stdout=sp.PIPE).stdout.read().decode().splitlines()
-    if common.should_print: common.debug(f'⟨gethexid.py⟩ wmc lines: {lines}')
+    if common.should_log: common.debug(f'⟨gethexid.py⟩ wmc lines: ', *lines)
     if not wmc_pattern:
         wmc_pattern = common.compile_wmc_pattern()
     if len(lines) == 1:
         line = lines[0]
         linedict = common.split_wmc_line(line, wmc_pattern)
         hexid = linedict['hexid']
-        if common.should_stdout_result: print(hexid, end='')
+        if common.should_output_result: print(hexid, end='')
         return hexid
     linedicts = []
+    linedicts_length = 0
     script_file_name = __file__
     import re
     # TODO: use --ignore-scripts
-    compiled_re = re.compile(rf'{script_file_name} ([\'"])?{app}\1?')
+    compiled_re = re.compile(rf'{script_file_name.rpartition("/")[2]} ([\'"])?{app}\1?')
     for line in lines:
         linedict = common.split_wmc_line(line, wmc_pattern)
         name = linedict['name']
@@ -53,17 +54,18 @@ def main(app: str, *args):
             # gethexid.py Lotion, gethexid.py 'Lotion', gethexid.py "Lotion"
             continue
         linedicts.append(linedict)
+        linedicts_length += 1
 
-    if common.should_print: common.debug(f'⟨gethexid.py⟩ linedicts: {linedicts}')
-    if len(linedicts) == 1:
+    if common.should_log: common.debug(f'⟨gethexid.py⟩ linedicts: ', *linedicts)
+    if linedicts_length == 1:
         linedict = linedicts[0]
 
         hexid = linedict['hexid']
-        if common.should_stdout_result: print(hexid, end='')
+        if common.should_output_result: print(hexid, end='')
         return hexid
 
     classnames_lowercase = []
-    all_linedicts_have_same_classname = False
+    all_linedicts_have_same_classname = True
     linedicts_with_relevant_classnames = []
     linedicts_with_relevant_classnames_length = 0
     for linedict in linedicts:
@@ -71,11 +73,11 @@ def main(app: str, *args):
         linedict['classname'] = classname_lowercase
         if app not in classname_lowercase:
             all_linedicts_have_same_classname = False
-            break
+            continue
         classnames_lowercase.append(classname_lowercase)
         linedicts_with_relevant_classnames.append(linedict)
         linedicts_with_relevant_classnames_length += 1
-    all_linedicts_have_same_classname = True
+    if common.should_log: common.debug(f'⟨gethexid.py⟩ linedicts_with_relevant_classnames: ', *linedicts_with_relevant_classnames)
     if all_linedicts_have_same_classname:
         # several linedicts, all of them have the same classname
         for x in common.settings['last_is_most_recent']:
@@ -83,31 +85,31 @@ def main(app: str, *args):
             # then return the hexid of the last of them
             if all(x in classname for classname in classnames_lowercase):
                 hexid = linedicts[-1]['hexid']
-                if common.should_stdout_result: print(hexid, end='')
+                if common.should_output_result: print(hexid, end='')
                 return hexid
         hexid = linedicts[0]['hexid']
-        if common.should_stdout_result: print(hexid, end='')
+        if common.should_output_result: print(hexid, end='')
+        return hexid
+    
+    # several linedicts, different classnames
+    # apps_with_relevant_classnames = [linedict for linedict in linedicts if app in linedict['classname'].lower()]
+    if linedicts_with_relevant_classnames_length == 1:
+        linedict = linedicts_with_relevant_classnames[0]
+
+        hexid = linedict['hexid']
+        if common.should_output_result: print(hexid, end='')
         return hexid
     else:
-        # several linedicts, different classnames
-        # apps_with_relevant_classnames = [linedict for linedict in linedicts if app in linedict['classname'].lower()]
-        if linedicts_with_relevant_classnames_length == 1:
-            linedict = linedicts_with_relevant_classnames[0]
-
-            hexid = linedict['hexid']
-            if common.should_stdout_result: print(hexid, end='')
-            return hexid
-        else:
-            for x in common.settings['last_is_most_recent']:
-                # if this app is among the apps in last_is_most_recent,
-                # then return the hexid of the last of them
-                if all(x in linedict for linedict in linedicts_with_relevant_classnames):
-                    hexid = linedicts[-1]['hexid']
-                    if common.should_stdout_result: print(hexid, end='')
-                    return hexid
-            hexid = linedicts_with_relevant_classnames[0]['hexid']
-            if common.should_stdout_result: print(hexid, end='')
-            return hexid
+        for x in common.settings['last_is_most_recent']:
+            # if this app is among the apps in last_is_most_recent,
+            # then return the hexid of the last of them
+            if all(x in linedict for linedict in linedicts_with_relevant_classnames):
+                hexid = linedicts[-1]['hexid']
+                if common.should_output_result: print(hexid, end='')
+                return hexid
+        hexid = linedicts_with_relevant_classnames[0]['hexid']
+        if common.should_output_result: print(hexid, end='')
+        return hexid
 
 
 if __name__ == '__main__':

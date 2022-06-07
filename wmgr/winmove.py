@@ -9,7 +9,7 @@ def main(where: Literal['next'], *args):
     """
     `where` currently can only be "next".
     `args` support `--win=...` (not supporting pid. only wid (8-9 digits), hex (0x...) or name).
-    `--no-print` is global and makes `console_log` a noop.
+    `--no-log` is global and makes `console_log` a noop.
     """
     import common
 
@@ -111,12 +111,12 @@ def main(where: Literal['next'], *args):
     # ** Setting target_coords['x'] accounting for each monitor's x offset
     # bottom monitor has x offset of 326
     # top monitor has x offset of 0
-    # from bottom to top: windict['x'] (326) - current_mon['x'] (326) is 0 → 0 + target_mon['x'] (0) is 0 → target_mon['x'] = 0
-    # from top to bottom: windict['x'] (0) - current_mon['x'] (0) is 0 → 0 + target_mon['x'] (326) is 326 → target_mon['x'] = 326
+    # from bottom to top: windict['x'] (326) - current_mon['x'] (326) is 0 -> 0 + target_mon['x'] (0) is 0 -> target_mon['x'] = 0
+    # from top to bottom: windict['x'] (0) - current_mon['x'] (0) is 0 -> 0 + target_mon['x'] (326) is 326 -> target_mon['x'] = 326
     win_relative_x_within_current_mon = windict['x'] - current_mon['x']
     target_coords['x'] = win_relative_x_within_current_mon + target_mon['x']
     msg = (f"\ntarget_coords['x'] (accounting for offset)\n\t"
-           f"because windict['x'] is ({windict['x']}) and current_mon['x'] is ({current_mon['x']}) → win_relative_x_within_current_mon is {win_relative_x_within_current_mon},\n\t"
+           f"because windict['x'] is ({windict['x']}) and current_mon['x'] is ({current_mon['x']}) -> win_relative_x_within_current_mon is {win_relative_x_within_current_mon},\n\t"
            f"so target_coords['x'] ({target_coords['x']}) is set to win_relative_x_within_current_mon ({win_relative_x_within_current_mon}) + target_mon['x'] ({target_mon['x']})")
     common.info(msg)
 

@@ -11,9 +11,9 @@ def main(app: str, *args, **kwargs) -> bool:
     
     """
 
-    # from common import should_print # 0.5ms
+    # from common import should_log # 0.5ms
     import common  # 2ms?
-    if common.should_print: common.debug(f'\nmain({app = }, {args = }, {kwargs = })')
+    if common.should_log: common.debug(f'\nmain({app = }, {args = }, {kwargs = })')
 
     launch_new = False
     exec_path = None
@@ -54,23 +54,23 @@ def main(app: str, *args, **kwargs) -> bool:
 
     import getwid
     wid = getwid.main(app)  # ~30ms, 80% of run time
-    if common.should_print: common.info(f'getwid returned: {repr(wid)}')
+    if common.should_log: common.info(f'getwid returned: {wid!r}')
 
     if wid:
         proc = subprocess.Popen(['xdotool', 'windowactivate', wid], stderr=subprocess.PIPE)  # ~5ms, 12% of run time
         stderr = proc.stderr.read()
         if not stderr:
-            if common.should_print: common.good(f'Activated {wid} successfully')
+            if common.should_log: common.good(f'Activated {wid} successfully')
             return True
 
         # We have stderr
         # xdotool is quiet unless err which looks like "XGetWindowProperty[_NET_WM_DESKTOP] failed (code=1)" but code is 0
-        if common.should_print:
-            common.warn((f"wid: {repr(wid)} failed because xdotool stderred: "
+        if common.should_log:
+            common.warn((f"{wid=!r} failed because xdotool stderred: "
                          f'{stderr}'
                          f"\n\tCalling getwid with ignore={wid}..."))
         wid = getwid.main(app, ignore={wid})
-        if common.should_print: common.info(f'getwid returned: {repr(wid)}')
+        if common.should_log: common.info(f'getwid returned: {wid!r}')
 
         if not wid:
             if not launch_new:
@@ -84,17 +84,17 @@ def main(app: str, *args, **kwargs) -> bool:
         proc = subprocess.Popen(['xdotool', 'windowactivate', wid], stderr=subprocess.PIPE)
         stderr = proc.stderr.read()
         if not stderr:
-            if common.should_print: common.good(f'Activated {wid} successfully')
+            if common.should_log: common.good(f'Activated {wid} successfully')
             return True
-        common.notif_fatal((f"wid: {repr(wid)} failed because xdotool stderred: "
+        common.notif_fatal((f"wid: {wid!r} failed because xdotool stderred: "
                             f"{stderr}"
-                            "\n\tgiving up"))
+                            "\n\tGiving up"))
         return False
 
     if not wid and not launch_new:
         alt_names.extend(kwargs.get('alt', []))
         if not alt_names:
-            common.notif_fatal("wid is Falsey, alt not in kwargs, and no arg startswith --alt=. aborting")
+            common.notif_fatal("wid is Falsey, 'alt' not in kwargs, and no arg startswith --alt=. aborting")
             return False
         # alt_names is not None
         for alt_name in alt_names:
@@ -103,11 +103,13 @@ def main(app: str, *args, **kwargs) -> bool:
         common.notif_fatal(f'wid is Falsey, {alt_names = } but none succeeded. aborting')
         return False
 
-    if common.should_print: common.info("wid is falsey, launching new")
+    if common.should_log: common.info("wid is falsey, launching new")
     if exec_path:
-        return common.launch(exec_path)
+        launched = common.launch(exec_path)
     else:
-        return common.launch(app)
+        launched = common.launch(app)
+    if common.should_log: common.debug(f"Launched: {launched}")
+    return launched
 
 
 if __name__ == '__main__':
@@ -117,8 +119,8 @@ if __name__ == '__main__':
     sys.exit(not isok)
     #
     # try:
-    #     # should_print and console_log(f'[INFO] before calling main({", ".join(sys.argv[1:])})')
+    #     # should_log and console_log(f'[INFO] before calling main({", ".join(sys.argv[1:])})')
     #     isok = main(*sys.argv[1:])
     # except Exception as e:
     #     print(f'[fatal] main() raised {e.__class__}: {", ".join(map(str, e.args))}. sys.argv[1:] are: {", ".join(sys.argv[1:])}', file=sys.stderr)  # else:
-    #     # should_print and console_log(f'main() → {isok}')
+    #     # should_log and console_log(f'main() -> {isok}')

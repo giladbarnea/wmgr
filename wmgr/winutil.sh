@@ -51,91 +51,36 @@ function get_primary_monitor_num() {
   _pmonitor_rel_x=$(xrandr --current | grep -o -P '(?<=primary \d{4}x\d{4}\+)\d{0,4}')
   pmonitor_num=$(("$_pmonitor_rel_x" / 1920))
 }
-#########################
-# ** ####### DEPRECATED ########
-#########################
-function xsearch() {
-  # Exports `wid`. $1: process name (string)
-  log "\nxsearch(${*}) | doing 'xdotool search --onlyvisible --classname \"\$1\"'"
-  wids=($(xdotool search --onlyvisible --classname "$1" | pyp lines))
-  if [[ -z "$wids" ]]; then
-    log "xsearch() | '--clasname' returned empty, trying with '--name'..."
-    wids=($(xdotool search --onlyvisible --name "$1" | pyp lines))
-  fi
-  if [[ -z "$wids" ]]; then
-    log "xsearch() | bad: '--name' returned empty. aborting"
-    return 1
-  fi
-  log "xsearch() | wids (${#wids}): $wids. popuplating names..."
-  #  names=($(echo $wids | pyp lines))
-  declare -a names=()
-  for wid in $wids; do
-    name=$(xdotool getwindowname $wid)
-    names+=($name)
-  done
-  log "xsearch() | names (${#names}): $names"
-  local fn
-  local otherfn
-  log "xsearch() | is either nautilus, chrome or vlc?"
-  if [[ "$1" == "nautilus" || "$1" == "chrome" || "$1" == "vlc" ]]; then
-    log "xsearch() | yes, either nautilus, chrome or vlc"
-    fn="head"
-    otherfn="tail"
-  else
-    log "xsearch() | no, neither nautilus nor chrome nor vlc"
-    fn="tail"
-    otherfn="head"
-  fi
-  log "xsearch() | fn: $fn, otherfn: $otherfn. using '$fn -1'"
-  wid=$(echo "$wids" | $fn -1)
-  log "xsearch() | wid: $wid"
 
-  if [[ -n $(xdotool getwindowpid "$wid") ]]; then
-    log "xsearch() | good: wid ok, echoing: $wid"
-    echo -n "$wid"
-    return 0
+# # toggle_always_on_top [APP]
+# `app` can be: name (`'pycharm'`), wid (`'100901473'`), pid (`'125888'`), hexid (`'0x0603a261'`).
+# If no `app` is given, prompts to select window interactively.
+function toggle_always_on_top() {
+  log.title "toggle_always_on_top(${*})"
+  local wid
+  if [[ "$1" ]]; then
+    if ! wid=$(vex "$WINMGMT"/getwid.py "$1" --no-log --no-notif --output-result) ; then
+      log.fatal "Could not get window id for $1"
+      return 1
+    fi
   else
-    log "xsearch() | fail: wid not ok. trying 2nd to last"
-    wid=$(echo "$wids" | $fn -2 | $otherfn -1)
-    log "xsearch() | wid: $wid"
-
-    if [[ -n $(xdotool getwindowpid "$wid") ]]; then
-      log "xsearch() | good: wid ok, echoing: $wid"
-      echo -n "$wid"
-      return 0
-    else
-      log "xsearch() | fail: wid not ok. nothing echoed"
+    if ! wid=$(vex xdotool selectwindow ---log-only-errors); then
+      log.fatal Failed
       return 1
     fi
   fi
-}
-#########################
-# ** ####### NEW ########
-#########################
-function toggle_always_on_top() {
-  # Doesn't export. works on active window
-  log.title "toggle_always_on_top(${*})"
-  local wid
-  local hexid
-  wid=$(xdotool getactivewindow)
   log.debug "wid: $wid"
-  local hexid
-  if ! hexid="$("$WINMGMT"/gethexid.py "$wid" --no-print | tail -1)"; then
-    log.fatal "failed gethexid \"$wid\""
-    return 1
-  fi
-  log.debug "hexid: $hexid"
-  if is_always_on_top "$wid"; then
-    log.debug "$wid is always on top, toggling off"
-    wmctrl -r :ACTIVE: -b 'remove,above'
-    xprop -id "$hexid" -f _NET_WM_WINDOW_OPACITY 32c -set _NET_WM_WINDOW_OPACITY "$(printf 0x%x $((0xffffffff * 100 / 100)))"
+  if xwininfo -wm -id "$wid" | grep -q Above; then
+    log.info "$wid is always on top, toggling off"
+    wmctrl -v -i -r "$wid" -b 'remove,above'
+    xprop -id "$wid" -f _NET_WM_WINDOW_OPACITY 32c -set _NET_WM_WINDOW_OPACITY "$(printf 0x%x $((0xffffffff * 100 / 100)))"
   else
-    log.debug "$wid is not always on top, toggling on"
-    wmctrl -r :ACTIVE: -b 'add,above'
-    xprop -id "$hexid" -f _NET_WM_WINDOW_OPACITY 32c -set _NET_WM_WINDOW_OPACITY "$(printf 0x%x $((0xffffffff * 85 / 100)))"
+    log.info "$wid is not always on top, toggling on"
+    wmctrl -v -i -r "$wid" -b 'add,above'
+    xprop -id "$wid" -f _NET_WM_WINDOW_OPACITY 32c -set _NET_WM_WINDOW_OPACITY "$(printf 0x%x $((0xffffffff * 80 / 100)))"
   fi
 }
-# # is_always_on_top STRING_OR_NUMBER
+# # is_always_on_top ⟨APP⟩
 function is_always_on_top() {
   log.title "is_always_on_top(${*})"
   if [[ -z "$1" ]]; then
@@ -144,14 +89,12 @@ function is_always_on_top() {
     return 1
   fi
   if does_win_state_include "$1" "Above"; then
-    log.debug "[is_always_on_top] returning 0"
     return 0
   else
-    log.debug "[is_always_on_top] returning 1"
     return 1
   fi
 }
-# # does_win_state_include STRING_OR_NUMBER Maximized|Above|...
+# # does_win_state_include ⟨APP⟩ ⟨Maximized|Above|...⟩
 function does_win_state_include() {
   log.title "does_win_state_include(${*})"
   if [[ -z "$1" ]]; then
@@ -160,16 +103,10 @@ function does_win_state_include() {
     return 1
   fi
   local wid
-  wid=$(python3.8 "$WINMGMT"/getwid.py "$1" --no-print | tail -1)
+  wid=$(vex "$WINMGMT"/getwid.py "$1" --no-log --no-notif --output-result)
   #  wait $!
   log.debug "wid: $wid"
-  if xwininfo -wm -id "$wid" | grep -Z "$2"; then
-    log.debug "[does_win_state_include] returning 0"
-    return 0
-  else
-    log.debug "[does_win_state_include] returning 1"
-    return 1
-  fi
+  xwininfo -wm -id "$wid" | grep -q "$2"
 }
 # is_border_stuck NUMBER_OR_STRING
 function is_border_stuck() {
@@ -197,7 +134,7 @@ function unmaximize() {
     window=$(xdotool getactivewindow)
   else
     # log.fatal "[unmaximize($*)] NOT IMPLEMENTED accepting window arg"
-    window=$(python3.8 "$WINMGMT"/getwid.py "$window" --no-print)
+    window=$("$WINMGMT"/getwid.py "$window"  --no-log --no-notif --output-result)
     # return 1
   fi
   log.debug "[unmaximize()] window: $window"
@@ -299,7 +236,7 @@ function move_and_resize() {
       if [[ -z "$app" ]]; then
         app="$1"
         log.debug "app: $app"
-        wid="$(python3.8 "$WINMGMT/getwid.py" "$app" --no-print)"
+        wid="$("$WINMGMT/getwid.py" "$app" --no-print)"
         log.debug "wid: $wid"
         shift
       else
@@ -330,7 +267,7 @@ function get_window_geo() {
     eval "$(xdotool getactivewindow getwindowgeometry --shell)"
   else
     log.debug "[get_window_geo()] calling 'getwid $1'"
-    wid=$(python3.8 "$WINMGMT/getwid.py" "$1" --no-print | tail -1)
+    wid=$("$WINMGMT/getwid.py" "$1" --no-print | tail -1)
     eval "$(xdotool getwindowgeometry --shell "$wid")"
   fi
   # shellcheck disable=SC2153
